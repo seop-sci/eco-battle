@@ -96,7 +96,9 @@ button{cursor:pointer}
 .overlay p{margin:6px 0 0}
 .banner{position:absolute;left:10px;right:10px;top:10px;padding:6px 12px;border-radius:8px;font-weight:700;font-size:14px;text-align:center;pointer-events:none}
 .banner.drought{background:#FFF1D6;color:#8A5200;border:1px solid var(--warn)}
-.banner.rain{background:#DDF1EE;color:#1C5A53;border:1px solid var(--accent)}
+.banner.plague{background:#F4E4F3;color:#6B2E67;border:1px solid #8E4A8A}
+.banner.cold{background:#E1ECF6;color:#22507C;border:1px solid #3B72A6}
+.banner.trial{background:#FBE3E3;color:#8E2525;border:1px solid var(--bad);font-size:16px}
 .banner.collapse{background:#FBE3E3;color:#8E2525;border:1px solid var(--bad);top:auto;bottom:10px}
 .pyrbox{display:flex;flex-direction:column;gap:6px}
 .pyrhead{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
@@ -117,9 +119,21 @@ button{cursor:pointer}
 .ecard small{color:var(--muted);font-size:12px;line-height:1.35}
 .ecard:hover:not(:disabled){border-color:var(--accent)}
 .ecard:disabled{opacity:.38;cursor:not-allowed}
-.sched{list-style:none;margin:0;padding:0;font-size:13.5px;display:flex;flex-direction:column;gap:4px}
-.sched li{display:flex;gap:10px}
-.sched .tt{font-family:var(--f-mono);color:var(--muted);flex:0 0 72px}
+.tlbox{display:flex;flex-direction:column;gap:6px;padding-block:10px}
+.tlhead{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+#nextTrial{font-weight:700;color:var(--bad);font-size:14px}
+.tl{position:relative;height:28px;background:var(--chip);border-radius:6px;overflow:hidden}
+.tl .seg{position:absolute;top:0;bottom:0;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;white-space:nowrap;overflow:hidden}
+.seg.drought,.chipk.drought{background:#C47A12}
+.seg.plague,.chipk.plague{background:#8E4A8A}
+.seg.cold,.chipk.cold{background:#3B72A6}
+.tl .tick{position:absolute;top:5px;bottom:5px;width:4px;margin-left:-2px;background:var(--bad);border-radius:2px}
+.tl .tick.past,.tl .seg.past{opacity:.3}
+.tl .cur{position:absolute;top:-2px;bottom:-2px;width:3px;margin-left:-1px;background:var(--ink);left:0;z-index:2;border-radius:2px}
+.tllegend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12.5px;color:var(--muted)}
+.tllegend span{display:inline-flex;align-items:center;gap:5px}
+.chipk{width:10px;height:10px;border-radius:2px;display:inline-block}
+.chipk.trial{background:var(--bad);width:4px}
 
 /* ---------- teacher ---------- */
 #teacher{max-width:1500px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
@@ -182,7 +196,8 @@ button{cursor:pointer}
       <li>0.3초마다 개체수 피라미드를 보고 점수를 줍니다. 피라미드가 이상적인 모양에 가까울수록 한 번에 최대 100점, 멀어질수록 10점에 가깝게 받습니다.</li>
       <li>이상적인 모양: 토끼 수가 풀 덮인 칸의 약 1/4, 늑대 수가 토끼 수의 약 1/5일 때입니다.</li>
       <li>토끼나 늑대가 사라지면 생태계가 무너진 것으로 보고 0점입니다. 방사 카드로 되살릴 수 있어요.</li>
-      <li>환경 변화 카드는 6번만 쓸 수 있습니다. 가뭄과 단비가 예고된 시각에 찾아옵니다.</li>
+      <li>큰 시련 3번(가뭄, 토끼 전염병, 한파)이 예고된 시각에 오고, 그 사이 20초마다 작은 시련이 찾아옵니다. 시련 일정은 모든 학생이 같습니다.</li>
+      <li>환경 변화 카드는 처음에 4번 쓸 수 있고, 30초마다 1번씩 다시 생깁니다(최대 6번).</li>
     </ol>
   </div>
 </section>
@@ -213,6 +228,11 @@ button{cursor:pointer}
           <div class="gain" id="gain">+0</div>
         </div>
       </div>
+      <div class="panel tlbox">
+        <div class="tlhead"><b>예고된 시련</b><span id="nextTrial"></span></div>
+        <div class="tl" id="tl" aria-label="시련 일정"></div>
+        <div class="tllegend" id="tlLegend"></div>
+      </div>
       <div class="field-frame">
         <canvas id="field" aria-label="초원"></canvas>
         <div class="banner" id="banner" hidden></div>
@@ -222,19 +242,16 @@ button{cursor:pointer}
     </div>
     <div class="col">
       <div class="panel" style="display:flex;flex-direction:column;gap:8px">
-        <div style="display:flex;justify-content:space-between;align-items:baseline"><h3>환경 변화 카드</h3><span class="muted" id="tokens">남은 개입 6회</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline"><h3>환경 변화 카드</h3><span class="muted" id="tokens">남은 개입 4회</span></div>
         <div class="cardrow" id="cards"></div>
-      </div>
-      <div class="panel">
-        <h3 style="margin-bottom:6px">예고된 환경 변화</h3>
-        <ul class="sched" id="sched"></ul>
       </div>
       <div class="panel">
         <h3 style="margin-bottom:6px">작전 힌트</h3>
         <ul class="rule" style="padding-left:18px">
           <li>토끼가 점선보다 많이 넘치면 곧 풀이 바닥나고 늑대가 폭증합니다.</li>
-          <li>가뭄 때는 생산자부터 무너집니다. 언제 초지를 복원할지 생각해 보세요.</li>
-          <li>개입 카드는 6번뿐입니다. 아껴 두었다가 위기에 쓰세요.</li>
+          <li>가뭄과 한파 때는 생산자부터 무너집니다. 언제 초지를 복원할지 생각해 보세요.</li>
+          <li>작은 시련은 3초 전에 예고됩니다. 시련 뒤에 피라미드가 어떻게 흔들리는지 보고 대응하세요.</li>
+          <li>카드는 30초마다 다시 생기지만 최대 6번까지만 모입니다. 너무 아끼면 손해예요.</li>
         </ul>
       </div>
     </div>
@@ -294,6 +311,7 @@ function makeSim(W, H, P, rnd) {
   S.scatterW = n => scatter(addW, n);
   S.cullW = f => { shuffle(Wf); Wf.length = Math.floor(Wf.length * (1 - f)); S.Wf = Wf; rebuild(); };
   S.cullR = f => { shuffle(R); R.length = Math.floor(R.length * (1 - f)); S.R = R; rebuild(); };
+  S.burn = (x, y, rd) => { for (let dy = -rd; dy <= rd; dy++) for (let dx = -rd; dx <= rd; dx++) { const X = x + dx, Y = y + dy; if (X >= 0 && Y >= 0 && X < W && Y < H && dx*dx+dy*dy <= rd*rd) grass[idx(X, Y)] = 0.02; } R = R.filter(r => (r.x-x)*(r.x-x)+(r.y-y)*(r.y-y) > rd*rd); S.R = R; rebuild(); };
   S.plant = (x, y, r) => { for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) { const X = x + dx, Y = y + dy; if (X >= 0 && Y >= 0 && X < W && Y < H && dx*dx+dy*dy <= r*r) grass[idx(X, Y)] = 1; } };
 
   S.step = function () {
@@ -382,10 +400,33 @@ const $=id=>document.getElementById(id);
 const W=40,H=28,SEATS=30;
 const DEF={grow:1,rMeta:2,rMax:30,rAge:30,rRep:0.3,wMeta:2,wMax:150,wGain:20,wAge:60,wRepFood:80,wRep:0.1,hunt:0.3};
 const GPS=4;            // 1초에 진행하는 세대 수 (모든 학생 동일)
-const TOKENS=6;
+const TOKENS=4, TOKENS_MAX=6, RECHARGE=30; // 처음 개입 횟수, 최대, 충전 간격(초)
 const IDEAL_RG=0.25, IDEAL_WR=0.2, SIGMA=0.45;
 // 예고된 환경 변화 (시작 후 초)
-const EVENTS=[{from:70,to:120,kind:'drought',mul:0.25,name:'가뭄'},{from:200,to:230,kind:'rain',mul:2,name:'단비'}];
+// 큰 시련: 대결 시간의 몇 % 지점에 오는지 (3분, 5분, 7분 모두 같은 비율)
+const BIG=[
+  {f:.20,t:.34,kind:'drought',name:'가뭄',desc:'풀이 자라는 속도가 1/4로 줄어듭니다',grow:.25},
+  {f:.50,t:.60,kind:'plague',name:'토끼 전염병',desc:'토끼가 새끼를 잘 낳지 못합니다',rRep:.4},
+  {f:.75,t:.85,kind:'cold',name:'한파',desc:'풀 생장이 절반, 늑대가 에너지를 1.5배 씁니다',grow:.5,wMeta:1.5},
+];
+// 작은 시련: TRIAL_GAP초마다 하나씩 (종류와 장소는 라운드마다 정해지고 모든 학생이 같음)
+const TRIAL_GAP=20;
+const TRIALS={
+  fire:{name:'들불',desc:'한 구역의 풀과 토끼가 불탔습니다'},
+  rabIn:{name:'토끼 떼 유입',desc:'토끼 30마리가 몰려왔습니다'},
+  wolfIn:{name:'늑대 무리 유입',desc:'늑대 6마리가 몰려왔습니다'},
+  rabSick:{name:'토끼 질병',desc:'토끼 35%가 사라졌습니다'},
+  wolfPoach:{name:'늑대 밀렵',desc:'늑대 40%가 사라졌습니다'},
+};
+function buildPlan(seed,dur){
+  const big=BIG.map(b=>({...b,from:Math.round(b.f*dur),to:Math.round(b.t*dur)}));
+  const r=mulberry32(((seed||1)^0x9e3779b9)>>>0), keys=Object.keys(TRIALS), tr=[];
+  for(let s=TRIAL_GAP;s<dur-5;s+=TRIAL_GAP){
+    if(big.some(b=>s>=b.from-5&&s<b.to+5))continue;
+    tr.push({at:s,type:keys[(r()*keys.length)|0],x:(r()*W)|0,y:(r()*H)|0});
+  }
+  return {dur,big,tr};
+}
 
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 function peak(x,id){return x<=0?0:Math.exp(-Math.pow(Math.log(x/id),2)/(2*SIGMA*SIGMA))}
@@ -518,6 +559,7 @@ function startStudent(room,seat,name){
   $('lobby').hidden=true; $('student').hidden=false;
   $('sWho').textContent=`방 ${room} / ${seat}번 ${name}`; badge($('sNet'));
   const fc=$('field'),fx=fc.getContext('2d');
+  let plan=buildPlan(12345,300),ti=0,lastRech=null,tlTicks=[],tlSegs=[];
   let cell=16,S=null,round=null,roundId=null,score=0,tokens=TOKENS,lastHalf=-1,lastGen=0,state='wait',cool=0,lastGain=0,lastSend=0,myRank='-';
 
   function fresh(seed){
@@ -544,9 +586,36 @@ function startStudent(room,seat,name){
       b.onclick=()=>{ if(b.disabled)return; c.fn(); tokens--; cool=performance.now()+2000; renderCards(); draw(); updPyr(); setTimeout(renderCards,2050); };
       box.appendChild(b);
     });
-    $('tokens').textContent=`남은 개입 ${tokens}회`;
+    updTokens();
   }
-  $('sched').innerHTML=EVENTS.map(e=>`<li><span class="tt">${fmt(e.from)}~${fmt(e.to)}</span><span>${e.name}: ${e.kind==='drought'?'풀이 자라는 속도가 1/4로 줄어듭니다':'풀이 두 배 빠르게 자랍니다'}</span></li>`).join('');
+  function updTokens(){
+    let t=`남은 개입 ${tokens}회`;
+    if(state==='play'&&round&&tokens<TOKENS_MAX){const el=(NET.now()-round.startAt)/1000; t+=` / ${Math.ceil(RECHARGE-(el%RECHARGE))}초 뒤 +1`;}
+    $('tokens').textContent=t;
+  }
+  function applyTrial(tr){
+    if(tr.type==='fire') S.burn(tr.x,tr.y,6);
+    else if(tr.type==='rabIn') S.scatterR(30);
+    else if(tr.type==='wolfIn') S.scatterW(6);
+    else if(tr.type==='rabSick') S.cullR(.35);
+    else if(tr.type==='wolfPoach') S.cullW(.4);
+  }
+  function renderPlan(){
+    const tl=$('tl'), d=plan.dur; tl.innerHTML='';
+    tlSegs=plan.big.map(b=>{const e=document.createElement('div');e.className='seg '+b.kind;e.style.left=(b.from/d*100)+'%';e.style.width=((b.to-b.from)/d*100)+'%';e.textContent=b.name;e.title=`${fmt(b.from)}~${fmt(b.to)} ${b.name}: ${b.desc}`;tl.appendChild(e);return {e,b}});
+    tlTicks=plan.tr.map(t=>{const e=document.createElement('i');e.className='tick';e.style.left=(t.at/d*100)+'%';e.title=fmt(t.at)+' 작은 시련';tl.appendChild(e);return {e,t}});
+    const c=document.createElement('i');c.className='cur';c.id='tlCur';tl.appendChild(c);
+    $('tlLegend').innerHTML=plan.big.map(b=>`<span><i class="chipk ${b.kind}"></i>${fmt(b.from)}~${fmt(b.to)} ${b.name}: ${b.desc}</span>`).join('')+`<span><i class="chipk trial"></i>빨간 눈금: 작은 시련 (3초 전에 종류를 알려 줍니다)</span>`;
+    $('nextTrial').textContent='';
+  }
+  function updPlan(el){
+    const d=plan.dur; $('tlCur').style.left=Math.min(100,el/d*100)+'%';
+    tlTicks.forEach(o=>o.e.classList.toggle('past',o.t.at<=el));
+    tlSegs.forEach(o=>o.e.classList.toggle('past',o.b.to<=el));
+    const nx=plan.tr.find(t=>t.at>el);
+    $('nextTrial').textContent=nx?`다음 작은 시련까지 ${Math.ceil(nx.at-el)}초`:'';
+  }
+  renderPlan();
 
   function counts(){let g=0;for(let i=0;i<W*H;i++)if(S.grass[i]>0.3)g++;return {g,r:S.R.length,w:S.Wf.length}}
   function updPyr(){
@@ -578,7 +647,7 @@ function startStudent(room,seat,name){
     round=v;
     if(!v||v.state==='idle'){ if(state!=='wait'){state='wait';} roundId=null; overlay('선생님을 기다리는 중','선생님이 대결을 시작하면 자동으로 시작됩니다.'); renderCards(); send(true); return; }
     if(v.id!==roundId){ // 새 라운드
-      roundId=v.id; fresh(v.seed); tokens=TOKENS; lastHalf=-1; lastGen=0; S.growMul=1;
+      roundId=v.id; fresh(v.seed); tokens=TOKENS; lastHalf=-1; lastGen=0; ti=0; lastRech=null; S.growMul=1; plan=buildPlan(v.seed,v.duration||300); renderPlan();
       score=0; try{const saved=JSON.parse(localStorage.getItem('eco:score')||'null'); if(saved&&saved.round===v.id&&saved.room===room&&saved.seat===seat){score=saved.score;tokens=saved.tok??TOKENS}}catch(e){}
       state='ready'; draw(); updPyr(); renderCards();
     }
@@ -601,15 +670,27 @@ function startStudent(room,seat,name){
       else{
         if(state!=='play'){state='play';overlay(null);renderCards();}
         const target=Math.floor(el*GPS); let n=0;
-        while(lastGen<target&&n<12){ const sec=lastGen/GPS; const ev=EVENTS.find(e=>sec>=e.from&&sec<e.to); S.growMul=ev?ev.mul:1; S.step(); lastGen++; n++; }
-        if(lastGen<target) lastGen=target; // 너무 뒤처지면 따라잡기
+        while(lastGen<target&&n<12){
+          const sec=lastGen/GPS, b=plan.big.find(e=>sec>=e.from&&sec<e.to);
+          S.growMul=(b&&b.grow)||1; S.P.rRep=DEF.rRep*((b&&b.rRep)||1); S.P.wMeta=DEF.wMeta*((b&&b.wMeta)||1);
+          while(ti<plan.tr.length&&plan.tr[ti].at<=sec){ applyTrial(plan.tr[ti]); ti++; }
+          S.step(); lastGen++; n++;
+        }
+        if(lastGen<target){ lastGen=target; while(ti<plan.tr.length&&plan.tr[ti].at<=lastGen/GPS) ti++; } // 너무 뒤처지면 따라잡기
+        const rc=Math.floor(el/RECHARGE);
+        if(lastRech===null) lastRech=rc;
+        if(rc>lastRech){ tokens=Math.min(TOKENS_MAX,tokens+(rc-lastRech)); lastRech=rc; renderCards(); }
+        updTokens(); updPlan(el);
         const half=Math.floor(el/TICK);
         if(half>lastHalf){ const st=updPyr(); const pts=pointsOf(st.g,st.r,st.w); const k=lastHalf<0?1:half-lastHalf; score+=pts*Math.min(k,2); lastGain=pts; lastHalf=half;
           $('gain').textContent='+'+pts; try{localStorage.setItem('eco:score',JSON.stringify({round:roundId,room,seat,score,tok:tokens}))}catch(e){} }
         $('sScore').textContent=score; $('sClock').textContent=fmt(round.duration-el);
-        const ev=EVENTS.find(e=>el>=e.from-5&&el<e.to);
         const bn=$('banner');
-        if(ev){bn.hidden=false; bn.className='banner '+ev.kind; bn.textContent=el<ev.from?`${Math.ceil(ev.from-el)}초 뒤 ${ev.name} 시작!`:`${ev.name} 진행 중 (남은 ${Math.ceil(ev.to-el)}초)`;} else bn.hidden=true;
+        const soon=plan.tr.find(t=>el>=t.at-3&&el<t.at+2.5);
+        const ev=plan.big.find(e=>el>=e.from-5&&el<e.to);
+        if(soon){const T=TRIALS[soon.type]; bn.hidden=false; bn.className='banner trial'; bn.textContent=el<soon.at?`${Math.ceil(soon.at-el)}초 뒤 시련: ${T.name}!`:`시련 발생! ${T.desc}`;}
+        else if(ev){bn.hidden=false; bn.className='banner '+ev.kind; bn.textContent=el<ev.from?`${Math.ceil(ev.from-el)}초 뒤 ${ev.name} 시작!`:`${ev.name} 진행 중 (남은 ${Math.ceil(ev.to-el)}초): ${ev.desc}`;}
+        else bn.hidden=true;
         if(n)draw();
         send();
       }
