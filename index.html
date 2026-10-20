@@ -1,0 +1,677 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>초원 균형 대결</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<script>
+/* =====================================================================
+   선생님이 설정할 부분 (안내서의 순서대로 채워 주세요)
+   ---------------------------------------------------------------------
+   1) Firebase 콘솔에서 복사한 설정값을 아래 FIREBASE_CONFIG 에 붙여넣습니다.
+      비워 두면(null) "체험 모드"로 동작합니다. 체험 모드는 한 컴퓨터의
+      같은 브라우저 안에서만 점수가 공유됩니다(탭 여러 개로 시험할 때).
+   2) TEACHER_PIN 은 교사 화면에 들어갈 때 묻는 숫자입니다.
+   ===================================================================== */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAgOvY1mSEwhDIqPBkbrVePsxwcvtkiGpo",
+  authDomain: "eco-battle-7e764.firebaseapp.com",
+  databaseURL: "https://eco-battle-7e764-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "eco-battle-7e764",
+  storageBucket: "eco-battle-7e764.firebasestorage.app",
+  messagingSenderId: "261898949270",
+  appId: "1:261898949270:web:5173c880fc4bb4a18d68b7",
+  measurementId: "G-L3271L374J"
+};
+/* 예시)
+const FIREBASE_CONFIG = {
+  apiKey: "AIza....",
+  authDomain: "my-eco.firebaseapp.com",
+  databaseURL: "https://my-eco-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "my-eco",
+  appId: "1:123:web:abc"
+};
+*/
+const TEACHER_PIN = "9602";
+</script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<style>
+:root{
+  --paper:#ECF0E8; --panel:#F7F9F4; --ink:#1E2B27; --muted:#5B6B64; --line:#CDD6CC;
+  --soil:#D6CCB0; --grass:#3F8F34; --rabbit:#D08A1C; --wolf:#45487A; --accent:#23675F;
+  --good:#2E7D4F; --warn:#B26A00; --bad:#B23A3A; --chip:#E1E8DE; --gold:#C9971B;
+  --f-display:"Do Hyeon","IBM Plex Sans KR",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px 40px}
+h1,h2,h3{font-family:var(--f-display);font-weight:400;margin:0;letter-spacing:.01em;text-wrap:balance}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+[hidden]{display:none!important}
+.btn{border:1px solid var(--line);background:var(--panel);padding:9px 16px;border-radius:8px;font-size:15px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+.btn.danger{border-color:var(--bad);color:var(--bad)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.netbadge{font-size:12px;padding:3px 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel)}
+.netbadge.ok{border-color:var(--good);color:var(--good)}
+.netbadge.demo{border-color:var(--warn);color:var(--warn)}
+
+/* ---------- lobby ---------- */
+#lobby{max-width:520px;margin:6vh auto 0;display:flex;flex-direction:column;gap:16px}
+#lobby h1{font-size:40px}
+.form{display:grid;grid-template-columns:90px minmax(0,1fr);gap:10px 12px;align-items:center}
+.form input,.form select{border:1px solid var(--line);background:#fff;border-radius:8px;padding:9px 12px;width:100%}
+.lobby-actions{display:flex;gap:10px;flex-wrap:wrap}
+.rule{font-size:14px;margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
+
+/* ---------- student ---------- */
+#student{max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+.sbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px}
+.sbar h2{font-size:24px}
+.who{font-size:15px}
+.big{display:flex;gap:18px;margin-left:auto;align-items:baseline;flex-wrap:wrap}
+.big .k{font-size:12px;color:var(--muted);display:block}
+.big .v{font-family:var(--f-mono);font-size:30px;line-height:1.1;font-variant-numeric:tabular-nums}
+#sScore{color:var(--accent)}
+.sgrid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:860px){.sgrid{grid-template-columns:minmax(0,1fr)}}
+.col{display:flex;flex-direction:column;gap:12px;min-width:0}
+.field-frame{position:relative;border-radius:10px;overflow:hidden;border:1px solid var(--line);background:var(--soil)}
+#field{display:block;width:100%}
+.overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(236,240,232,.82);text-align:center;padding:16px}
+.overlay h3{font-size:30px}
+.overlay p{margin:6px 0 0}
+.banner{position:absolute;left:10px;right:10px;top:10px;padding:6px 12px;border-radius:8px;font-weight:700;font-size:14px;text-align:center;pointer-events:none}
+.banner.drought{background:#FFF1D6;color:#8A5200;border:1px solid var(--warn)}
+.banner.rain{background:#DDF1EE;color:#1C5A53;border:1px solid var(--accent)}
+.banner.collapse{background:#FBE3E3;color:#8E2525;border:1px solid var(--bad);top:auto;bottom:10px}
+.pyrbox{display:flex;flex-direction:column;gap:6px}
+.pyrhead{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.pyr{display:flex;flex-direction:column;gap:4px}
+.lvl{display:grid;grid-template-columns:72px minmax(0,1fr) 40px;gap:8px;align-items:center;font-size:12.5px}
+.lvl .lab{color:var(--muted);text-align:right}
+.track{position:relative;height:16px}
+.track .b{position:absolute;top:0;bottom:0;left:50%;transform:translateX(-50%);border-radius:2px;transition:width .3s}
+.track .ideal{position:absolute;top:-2px;bottom:-2px;left:50%;transform:translateX(-50%);border:1.5px dashed var(--ink);border-radius:3px;opacity:.55;transition:width .3s}
+.lvl .n{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.gauge{height:12px;border-radius:6px;background:var(--chip);overflow:hidden}
+.gauge i{display:block;height:100%;width:0;background:var(--accent);transition:width .3s}
+.gain{font-family:var(--f-mono);font-size:22px;color:var(--accent)}
+.note{font-size:12.5px;color:var(--muted);margin:0}
+.cardrow{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
+.ecard{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:9px 11px;text-align:left;display:flex;flex-direction:column;gap:2px}
+.ecard b{font-size:14px}
+.ecard small{color:var(--muted);font-size:12px;line-height:1.35}
+.ecard:hover:not(:disabled){border-color:var(--accent)}
+.ecard:disabled{opacity:.38;cursor:not-allowed}
+.sched{list-style:none;margin:0;padding:0;font-size:13.5px;display:flex;flex-direction:column;gap:4px}
+.sched li{display:flex;gap:10px}
+.sched .tt{font-family:var(--f-mono);color:var(--muted);flex:0 0 72px}
+
+/* ---------- teacher ---------- */
+#teacher{max-width:1500px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+.tbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
+.tbar h1{font-size:32px}
+.tbar .room{font-family:var(--f-mono);font-size:18px;padding:2px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
+.tctl{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-left:auto}
+.tctl select{border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px 10px}
+#tClock{font-family:var(--f-mono);font-size:30px;font-variant-numeric:tabular-nums;min-width:4.5ch;text-align:right}
+.tmain{display:grid;grid-template-columns:300px minmax(0,1fr);gap:14px;align-items:start}
+@media (max-width:900px){.tmain{grid-template-columns:minmax(0,1fr)}}
+.rank{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.rank li{display:grid;grid-template-columns:30px minmax(0,1fr) auto;gap:8px;align-items:center;padding:6px 8px;border-radius:8px;background:var(--paper)}
+.rank li .pos{font-family:var(--f-display);font-size:20px;text-align:center}
+.rank li:nth-child(1) .pos{color:var(--gold)}
+.rank li .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rank li .sc{font-family:var(--f-mono);font-size:18px}
+.seats{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px}
+.seat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.seat.empty{opacity:.4}
+.seat.collapse{border-color:var(--bad);background:#FBEDED}
+.seat.off{opacity:.55;border-style:dashed}
+.seat .top{display:flex;justify-content:space-between;align-items:baseline;gap:6px}
+.seat .no{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.seat .nm{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.seat .sc{font-family:var(--f-mono);font-size:22px;line-height:1.1}
+.seat .rk{font-size:12px;color:var(--muted)}
+.mini{display:flex;flex-direction:column;gap:2px;align-items:center}
+.mini i{display:block;height:6px;border-radius:2px;min-width:1px}
+.seat .st{font-size:11.5px;color:var(--muted);display:flex;justify-content:space-between;gap:4px}
+.seat .bal{height:5px;background:var(--chip);border-radius:3px;overflow:hidden}
+.seat .bal i{display:block;height:100%;background:var(--accent)}
+</style>
+</head>
+<body>
+
+<!-- ================= 입장 화면 ================= -->
+<section id="lobby">
+  <div>
+    <div class="muted" style="font-size:13px">통합과학2 생태계와 환경</div>
+    <h1>초원 균형 대결</h1>
+  </div>
+  <div class="panel" style="display:flex;flex-direction:column;gap:14px">
+    <div class="form">
+      <label for="inRoom">방 코드</label><input id="inRoom" placeholder="예: 1-3 (반 이름)" autocomplete="off">
+      <label for="inSeat">번호</label><select id="inSeat"></select>
+      <label for="inName">이름</label><input id="inName" placeholder="이름 또는 별명" maxlength="10" autocomplete="off">
+    </div>
+    <div class="lobby-actions">
+      <button class="btn primary" id="goStudent">학생으로 입장</button>
+      <button class="btn" id="goTeacher">교사 화면</button>
+      <span class="netbadge" id="netBadge"></span>
+    </div>
+    <p class="note" id="lobbyMsg"></p>
+  </div>
+  <div class="panel">
+    <h3 style="margin-bottom:6px">점수 규칙</h3>
+    <ol class="rule">
+      <li>선생님이 시작하면 모든 학생의 초원이 똑같은 상태에서 동시에 시작합니다.</li>
+      <li>0.5초마다 개체수 피라미드를 보고 점수를 줍니다. 피라미드가 이상적인 모양에 가까울수록 최대 10점, 멀어질수록 1점에 가깝게 받습니다.</li>
+      <li>이상적인 모양: 토끼 수가 풀 덮인 칸의 약 1/4, 늑대 수가 토끼 수의 약 1/5일 때입니다.</li>
+      <li>토끼나 늑대가 사라지면 생태계가 무너진 것으로 보고 0점입니다. 방사 카드로 되살릴 수 있어요.</li>
+      <li>환경 변화 카드는 6번만 쓸 수 있습니다. 가뭄과 단비가 예고된 시각에 찾아옵니다.</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ================= 학생 화면 ================= -->
+<section id="student" hidden>
+  <div class="sbar">
+    <h2>초원 균형 대결</h2>
+    <span class="who" id="sWho"></span>
+    <span class="netbadge" id="sNet"></span>
+    <div class="big">
+      <div><span class="k">남은 시간</span><span class="v" id="sClock">-:--</span></div>
+      <div><span class="k">순위</span><span class="v" id="sRank">-</span></div>
+      <div><span class="k">내 점수</span><span class="v" id="sScore">0</span></div>
+    </div>
+  </div>
+  <div class="sgrid">
+    <div class="col">
+      <div class="panel pyrbox">
+        <div class="pyrhead"><b>개체수 피라미드</b><span class="note">점선은 이상적인 폭입니다. 막대를 점선에 맞춰 보세요.</span></div>
+        <div class="pyr">
+          <div class="lvl"><span class="lab">2차 소비자</span><span class="track"><i class="ideal" id="iW"></i><i class="b" id="pW" style="background:var(--wolf)"></i></span><span class="n" id="nW">0</span></div>
+          <div class="lvl"><span class="lab">1차 소비자</span><span class="track"><i class="ideal" id="iR"></i><i class="b" id="pR" style="background:var(--rabbit)"></i></span><span class="n" id="nR">0</span></div>
+          <div class="lvl"><span class="lab">생산자</span><span class="track"><i class="b" id="pG" style="background:var(--grass)"></i></span><span class="n" id="nG">0</span></div>
+        </div>
+        <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center">
+          <div><div class="note" style="margin-bottom:3px">균형도 <span class="mono" id="balTxt">0%</span></div><div class="gauge"><i id="bal"></i></div></div>
+          <div class="gain" id="gain">+0</div>
+        </div>
+      </div>
+      <div class="field-frame">
+        <canvas id="field" aria-label="초원"></canvas>
+        <div class="banner" id="banner" hidden></div>
+        <div class="banner collapse" id="collapseBanner" hidden></div>
+        <div class="overlay" id="overlay"><div><h3 id="ovTitle">선생님을 기다리는 중</h3><p id="ovText">선생님이 대결을 시작하면 자동으로 시작됩니다.</p></div></div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="panel" style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline"><h3>환경 변화 카드</h3><span class="muted" id="tokens">남은 개입 6회</span></div>
+        <div class="cardrow" id="cards"></div>
+      </div>
+      <div class="panel">
+        <h3 style="margin-bottom:6px">예고된 환경 변화</h3>
+        <ul class="sched" id="sched"></ul>
+      </div>
+      <div class="panel">
+        <h3 style="margin-bottom:6px">작전 힌트</h3>
+        <ul class="rule" style="padding-left:18px">
+          <li>토끼가 점선보다 많이 넘치면 곧 풀이 바닥나고 늑대가 폭증합니다.</li>
+          <li>가뭄 때는 생산자부터 무너집니다. 언제 초지를 복원할지 생각해 보세요.</li>
+          <li>개입 카드는 6번뿐입니다. 아껴 두었다가 위기에 쓰세요.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 교사 화면 ================= -->
+<section id="teacher" hidden>
+  <div class="tbar">
+    <h1>초원 균형 대결</h1>
+    <span class="room" id="tRoom"></span>
+    <span class="netbadge" id="tNet"></span>
+    <div class="tctl">
+      <label for="tDur" class="muted">시간</label>
+      <select id="tDur"><option value="180">3분</option><option value="300" selected>5분</option><option value="420">7분</option></select>
+      <button class="btn primary" id="tStart">대결 시작</button>
+      <button class="btn" id="tStop">지금 끝내기</button>
+      <button class="btn danger" id="tClear">참가자 비우기</button>
+      <span id="tClock">-:--</span>
+    </div>
+  </div>
+  <p class="note" id="tMsg"></p>
+  <div class="tmain">
+    <div class="panel">
+      <h3 style="margin-bottom:8px">실시간 순위 <span class="muted" id="tCount" style="font-size:14px"></span></h3>
+      <ol class="rank" id="tRank"></ol>
+    </div>
+    <div class="seats" id="seats"></div>
+  </div>
+</section>
+
+<script>
+// core simulation, shared with page
+function makeSim(W, H, P, rnd) {
+  rnd = rnd || Math.random;
+  const N = W * H;
+  const grass = new Float32Array(N);
+  let rab = new Int32Array(N).fill(-1), wol = new Int32Array(N).fill(-1);
+  let R = [], Wf = [];
+  const S = { W, H, P, grass, R, Wf, t: 0, hist: [] , growMul: 1};
+  for (let i = 0; i < N; i++) grass[i] = rnd() < 0.7 ? rnd() : 0;
+  function idx(x, y) { return y * W + x; }
+  function nb(x, y) {
+    const o = [];
+    if (x > 0) o.push([x - 1, y]); if (x < W - 1) o.push([x + 1, y]);
+    if (y > 0) o.push([x, y - 1]); if (y < H - 1) o.push([x, y + 1]);
+    return o;
+  }
+  function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = (rnd() * (i + 1)) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; }
+  function addR(x, y, food) { const i = idx(x, y); if (rab[i] >= 0 || wol[i] >= 0) return false; R.push({ x, y, food: food ?? 15, age: (rnd() * 6) | 0 }); return true; }
+  function addW(x, y, food) { const i = idx(x, y); if (wol[i] >= 0 || rab[i] >= 0) return false; Wf.push({ x, y, food: food ?? 60, age: (rnd() * 10) | 0 }); return true; }
+  function scatter(fn, n) { let k = 0, tries = 0; while (k < n && tries < n * 50) { tries++; if (fn((rnd() * W) | 0, (rnd() * H) | 0)) { k++; rebuild(); } } }
+  function rebuild() { rab.fill(-1); wol.fill(-1); R.forEach((r, k) => rab[idx(r.x, r.y)] = k); Wf.forEach((w, k) => wol[idx(w.x, w.y)] = k); }
+  S.addR = (x, y) => { const ok = addR(x, y); rebuild(); return ok; };
+  S.addW = (x, y) => { const ok = addW(x, y); rebuild(); return ok; };
+  S.scatterR = n => scatter(addR, n);
+  S.scatterW = n => scatter(addW, n);
+  S.cullW = f => { shuffle(Wf); Wf.length = Math.floor(Wf.length * (1 - f)); S.Wf = Wf; rebuild(); };
+  S.cullR = f => { shuffle(R); R.length = Math.floor(R.length * (1 - f)); S.R = R; rebuild(); };
+  S.plant = (x, y, r) => { for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) { const X = x + dx, Y = y + dy; if (X >= 0 && Y >= 0 && X < W && Y < H && dx*dx+dy*dy <= r*r) grass[idx(X, Y)] = 1; } };
+
+  S.step = function () {
+    const P = S.P;
+    // grass regrow
+    const g = 0.03 * P.grow * S.growMul;
+    for (let i = 0; i < N; i++) {
+      if (grass[i] > 0) grass[i] = Math.min(1, grass[i] + g);
+      else if (rnd() < 0.02 * P.grow * S.growMul) grass[i] = 0.1; // seeds
+    }
+    // rabbits
+    rebuild();
+    const born = [];
+    for (const r of shuffle(R.slice())) {
+      if (r.dead) continue;
+      r.age++; r.food -= P.rMeta;
+      // move: prefer grass, avoid wolves
+      const opts = nb(r.x, r.y).filter(([x, y]) => rab[idx(x, y)] < 0 && wol[idx(x, y)] < 0);
+      opts.push([r.x, r.y]);
+      let best = null, bs = -1e9;
+      for (const [x, y] of opts) {
+        let s = grass[idx(x, y)] + rnd() * 0.5;
+        for (const [a, b] of nb(x, y)) if (wol[idx(a, b)] >= 0) s -= 2;
+        if (s > bs) { bs = s; best = [x, y]; }
+      }
+      rab[idx(r.x, r.y)] = -1; r.x = best[0]; r.y = best[1]; rab[idx(r.x, r.y)] = 1;
+      const gi = idx(r.x, r.y);
+      if (grass[gi] > 0.3 && r.food < P.rMax) { r.food = Math.min(P.rMax, r.food + grass[gi] * 10); grass[gi] = 0.02; }
+      if (r.food <= 0 || r.age > P.rAge) { r.dead = true; rab[gi] = -1; continue; }
+      if (r.age >= 6 && r.food >= 20 && rnd() < P.rRep) {
+        const near = nb(r.x, r.y);
+        if (!near.some(([x, y]) => wol[idx(x, y)] >= 0)) {
+          const free = near.filter(([x, y]) => rab[idx(x, y)] < 0 && wol[idx(x, y)] < 0);
+          if (free.length) { const [x, y] = free[(rnd() * free.length) | 0]; r.food /= 2; const c = { x, y, food: r.food, age: 0 }; born.push(c); rab[idx(x, y)] = 1; }
+        }
+      }
+    }
+    R = R.filter(r => !r.dead).concat(born); S.R = R; rebuild();
+    // wolves
+    const wb = [];
+    for (const w of shuffle(Wf.slice())) {
+      w.age++; w.food -= P.wMeta;
+      for (let m = 0; m < 2; m++) {
+        const hungry = w.food < P.wMax - P.wGain;
+        const here = nb(w.x, w.y);
+        const prey = here.filter(([x, y]) => rab[idx(x, y)] >= 0);
+        let tgt = null, ate = false;
+        if (prey.length && hungry) {
+          tgt = prey[(rnd() * prey.length) | 0];
+          const k = rab[idx(tgt[0], tgt[1])];
+          if (rnd() < P.hunt) { R[k].dead = true; rab[idx(tgt[0], tgt[1])] = -1; w.food = Math.min(P.wMax, w.food + P.wGain); ate = true; }
+          else tgt = null; // rabbit escaped
+        }
+        if (!tgt) {
+          let bd = 99, dir = null;
+          if (hungry) for (const r of R) { if (r.dead) continue; const d = Math.abs(r.x - w.x) + Math.abs(r.y - w.y); if (d < bd && d <= 5) { bd = d; dir = r; } }
+          const free = here.filter(([x, y]) => wol[idx(x, y)] < 0 && rab[idx(x, y)] < 0);
+          if (free.length) {
+            if (dir && rnd() < 0.8) { free.sort((a, b) => (Math.abs(a[0] - dir.x) + Math.abs(a[1] - dir.y)) - (Math.abs(b[0] - dir.x) + Math.abs(b[1] - dir.y))); tgt = free[0]; }
+            else tgt = free[(rnd() * free.length) | 0];
+          }
+        }
+        if (tgt) { wol[idx(w.x, w.y)] = -1; w.x = tgt[0]; w.y = tgt[1]; wol[idx(w.x, w.y)] = 1; }
+        if (ate) break;
+      }
+      if (w.food <= 0 || w.age > P.wAge) { w.dead = true; wol[idx(w.x, w.y)] = -1; continue; }
+      if (w.age >= 10 && w.food >= P.wRepFood && rnd() < P.wRep) {
+        const free = nb(w.x, w.y).filter(([x, y]) => wol[idx(x, y)] < 0 && rab[idx(x, y)] < 0);
+        if (free.length) { const [x, y] = free[(rnd() * free.length) | 0]; w.food /= 2; wb.push({ x, y, food: w.food, age: 0 }); wol[idx(x, y)] = 1; }
+      }
+    }
+    R = R.filter(r => !r.dead); Wf = Wf.filter(w => !w.dead).concat(wb); S.R = R; S.Wf = Wf; rebuild();
+    S.t++;
+    let gs = 0; for (let i = 0; i < N; i++) gs += grass[i];
+    S.hist.push({ t: S.t, g: gs, r: R.length, w: Wf.length });
+    if (S.hist.length > 400) S.hist.shift();
+  };
+  S.grassTotal = () => { let gs = 0; for (let i = 0; i < N; i++) gs += grass[i]; return gs; };
+  return S;
+}
+
+
+
+(function(){
+const $=id=>document.getElementById(id);
+const W=40,H=28,SEATS=30;
+const DEF={grow:1,rMeta:2,rMax:30,rAge:30,rRep:0.3,wMeta:2,wMax:150,wGain:20,wAge:60,wRepFood:80,wRep:0.1,hunt:0.3};
+const GPS=4;            // 1초에 진행하는 세대 수 (모든 학생 동일)
+const TOKENS=6;
+const IDEAL_RG=0.25, IDEAL_WR=0.2, SIGMA=0.45;
+// 예고된 환경 변화 (시작 후 초)
+const EVENTS=[{from:70,to:120,kind:'drought',mul:0.25,name:'가뭄'},{from:200,to:230,kind:'rain',mul:2,name:'단비'}];
+
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function peak(x,id){return x<=0?0:Math.exp(-Math.pow(Math.log(x/id),2)/(2*SIGMA*SIGMA))}
+function balanceOf(g,r,w){ if(!g||!r||!w) return 0; return Math.sqrt(peak(r/g,IDEAL_RG)*peak(w/r,IDEAL_WR)); }
+function pointsOf(g,r,w){ if(!r||!w) return 0; return Math.round(1+9*balanceOf(g,r,w)); }
+const fmt=s=>{s=Math.max(0,Math.ceil(s));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const cleanRoom=s=>String(s||'').trim().replace(/[.#$\[\]\/]/g,'-').slice(0,20);
+
+/* ---------------- 네트워크 (Firebase 또는 체험 모드) ---------------- */
+const CFG_BROKEN=(typeof FIREBASE_CONFIG==='undefined'||typeof TEACHER_PIN==='undefined');
+const CFG=CFG_BROKEN?null:FIREBASE_CONFIG;
+let NET_STATUS='';
+const statusSubs=[];
+function setStatus(t){NET_STATUS=t;statusSubs.forEach(f=>f())}
+function makeNet(){
+  if(CFG && !window.firebase) setStatus('Firebase를 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.');
+  if(CFG && window.firebase){
+    try{
+      firebase.initializeApp(CFG);
+      const db=firebase.database();
+      const perm=e=>setStatus('데이터베이스가 접근을 막았습니다. 4번 단계의 규칙을 다시 확인해 주세요. ('+(e&&e.code||e)+')');
+      db.ref('.info/connected').on('value',s=>setStatus(s.val()?'connected':'connecting'));
+      let offset=0; db.ref('.info/serverTimeOffset').on('value',s=>{offset=s.val()||0});
+      return {mode:'firebase',
+        now:()=>Date.now()+offset,
+        onRound:(room,cb)=>db.ref(`rooms/${room}/round`).on('value',s=>cb(s.val()),perm),
+        setRound:(room,v)=>db.ref(`rooms/${room}/round`).set(v).catch(perm),
+        onPlayers:(room,cb)=>db.ref(`rooms/${room}/players`).on('value',s=>cb(s.val()||{}),perm),
+        setPlayer:(room,seat,v)=>db.ref(`rooms/${room}/players/${seat}`).set(v).catch(perm),
+        clearPlayers:room=>db.ref(`rooms/${room}/players`).remove(),
+      };
+    }catch(e){ console.error(e); setStatus('Firebase 설정값이 올바르지 않습니다: '+e.message); }
+  }
+  // 체험 모드: 같은 브라우저 안의 탭끼리만 공유
+  const bc=('BroadcastChannel' in window)?new BroadcastChannel('eco-battle'):null;
+  const subs=[];
+  const ls={get:k=>{try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},
+            set:(k,v)=>{try{v===null?localStorage.removeItem(k):localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+  const fire=()=>subs.forEach(f=>f());
+  bc&&(bc.onmessage=fire); window.addEventListener('storage',fire);
+  const ping=()=>{fire(); bc&&bc.postMessage(1)};
+  const players=room=>{const o={};for(let i=1;i<=SEATS;i++){const v=ls.get(`eco:${room}:p:${i}`);if(v)o[i]=v}return o};
+  return {mode:'demo',
+    now:()=>Date.now(),
+    onRound:(room,cb)=>{const f=()=>cb(ls.get(`eco:${room}:round`));subs.push(f);f()},
+    setRound:(room,v)=>{ls.set(`eco:${room}:round`,v);ping()},
+    onPlayers:(room,cb)=>{const f=()=>cb(players(room));subs.push(f);f();setInterval(f,1000)},
+    setPlayer:(room,seat,v)=>{ls.set(`eco:${room}:p:${seat}`,v);bc&&bc.postMessage(1)},
+    clearPlayers:room=>{for(let i=1;i<=SEATS;i++)ls.set(`eco:${room}:p:${i}`,null);ping()},
+  };
+}
+const NET=makeNet();
+function badge(el){
+  const paint=()=>{
+    if(CFG_BROKEN){el.textContent='설정 오류';el.className='netbadge demo';return}
+    if(NET.mode!=='firebase'){el.textContent=CFG?'연결 실패 (체험 모드로 동작 중)':'체험 모드 (이 브라우저 안에서만)';el.className='netbadge demo';return}
+    if(NET_STATUS==='connected'){el.textContent='실시간 연결됨 (Firebase)';el.className='netbadge ok';}
+    else if(NET_STATUS==='connecting'||NET_STATUS===''){el.textContent='Firebase 연결 중...';el.className='netbadge demo';}
+    else {el.textContent='연결 문제';el.className='netbadge demo';}
+  };
+  statusSubs.push(paint); paint();
+}
+statusSubs.push(()=>{ const m=document.getElementById('lobbyMsg'); if(m&&NET_STATUS&&NET_STATUS!=='connected'&&NET_STATUS!=='connecting'&&!document.getElementById('pinIn')) m.textContent=NET_STATUS; });
+
+/* ---------------- 입장 화면 ---------------- */
+for(let i=1;i<=SEATS;i++){const o=document.createElement('option');o.value=i;o.textContent=i+'번';$('inSeat').appendChild(o)}
+badge($('netBadge'));
+try{const s=JSON.parse(localStorage.getItem('eco:me')||'{}');if(s.room)$('inRoom').value=s.room;if(s.seat)$('inSeat').value=s.seat;if(s.name)$('inName').value=s.name;}catch(e){}
+if(CFG_BROKEN) $('lobbyMsg').textContent='파일 위쪽 설정 부분에 오타가 있습니다. FIREBASE_CONFIG = { ... }; 처럼 중괄호와 세미콜론이 있는지 확인해 주세요.';
+else if(NET.mode==='demo'&&NET_STATUS) $('lobbyMsg').textContent=NET_STATUS;
+else if(NET.mode==='demo') $('lobbyMsg').textContent='지금은 체험 모드입니다. 교사 화면과 학생 화면을 같은 브라우저의 다른 탭에서 열어 시험해 보세요. 실제 수업에서는 안내서대로 Firebase 설정을 넣어야 합니다.';
+$('goStudent').onclick=()=>{
+  const room=cleanRoom($('inRoom').value), seat=+$('inSeat').value, name=$('inName').value.trim().slice(0,10);
+  if(!room){$('lobbyMsg').textContent='방 코드를 입력해 주세요. 선생님이 알려준 코드와 똑같이 적어야 합니다.';return}
+  if(!name){$('lobbyMsg').textContent='이름이나 별명을 입력해 주세요.';return}
+  try{localStorage.setItem('eco:me',JSON.stringify({room,seat,name}))}catch(e){}
+  startStudent(room,seat,name);
+};
+$('goTeacher').onclick=()=>{
+  const room=cleanRoom($('inRoom').value);
+  if(!room){$('lobbyMsg').textContent='교사 화면도 방 코드가 필요합니다. 학생들에게 알려 줄 코드를 먼저 적어 주세요.';return}
+  showPin(room);
+};
+function showPin(room){
+  const box=$('lobbyMsg');
+  box.innerHTML='교사 비밀번호: <input id="pinIn" type="password" inputmode="numeric" style="border:1px solid var(--line);border-radius:6px;padding:4px 8px;width:110px"> <button class="btn" id="pinOk" style="padding:4px 12px">확인</button>';
+  const go=()=>{ if(!CFG_BROKEN&&$('pinIn').value===TEACHER_PIN) startTeacher(room); else box.firstChild.textContent='비밀번호가 다릅니다. 다시 입력: '; };
+  $('pinOk').onclick=go; $('pinIn').onkeydown=e=>{if(e.key==='Enter')go()}; $('pinIn').focus();
+}
+
+/* ---------------- 그림 (토끼, 늑대) ---------------- */
+const COL={soil:'#D6CCB0',grass:'#3F8F34',rabbit:'#D08A1C',wolf:'#45487A',panel:'#F7F9F4'};
+function mkSprite(build){
+  const c=document.createElement('canvas');c.width=c.height=96;const g=c.getContext('2d');g.scale(1.5,1.5);
+  const parts=build(); g.lineJoin='round';g.lineCap='round';g.strokeStyle='rgba(20,18,14,.55)';g.lineWidth=4;
+  parts.forEach(p=>{if(p.o===false)return;g.beginPath();p.d(g);g.stroke();});
+  parts.forEach(p=>{g.beginPath();p.d(g);g.fillStyle=p.c;g.fill();});
+  return c;
+}
+const el=(x,y,rx,ry,rot)=>g=>g.ellipse(x,y,rx,ry,rot||0,0,Math.PI*2);
+const SPR={};
+(function(){
+  const fur=COL.rabbit;
+  SPR.rabbit=mkSprite(()=>[
+    {d:el(41,15,3.6,12,-0.32),c:fur},{d:el(47,15,3.6,12,0.12),c:fur},
+    {d:el(41,15,1.6,8,-0.32),c:'#F3B9AE',o:false},{d:el(47,15,1.6,8,0.12),c:'#F3B9AE',o:false},
+    {d:el(13,38,6,6),c:'#FFF8EC'},{d:el(28,40,16,12),c:fur},{d:el(21,47,9,6),c:fur},{d:el(21,47,9,6),c:'rgba(0,0,0,.18)',o:false},
+    {d:el(44,31,10,9),c:fur},{d:el(40,51,6,3),c:fur},
+    {d:el(49,28,2,2.2),c:'#24170A',o:false},{d:el(49.6,27.3,.7,.7),c:'#FFFFFF',o:false},{d:el(54,33,1.6,1.3),c:'#C76B6B',o:false},
+  ]);
+  const coat=COL.wolf,light=COL.panel;
+  SPR.wolf=mkSprite(()=>[
+    {d:g=>{g.moveTo(16,30);g.quadraticCurveTo(2,30,3,48);g.quadraticCurveTo(10,44,18,38);g.closePath();},c:coat},
+    {d:g=>{g.rect(18,36,4,18);g.rect(24,37,4,17);g.rect(37,37,4,17);g.rect(43,36,4,18);},c:coat},
+    {d:g=>{g.rect(24,37,4,17);g.rect(37,37,4,17);},c:'rgba(0,0,0,.2)',o:false},
+    {d:el(30,33,16,9),c:coat},
+    {d:g=>{g.moveTo(38,30);g.lineTo(43,14);g.lineTo(47,22);g.lineTo(51,13);g.lineTo(53,23);g.lineTo(62,29);g.lineTo(61,32);g.lineTo(52,34);g.lineTo(44,38);g.closePath();},c:coat},
+    {d:g=>{g.moveTo(52,30);g.lineTo(61.5,30.5);g.lineTo(60.5,32);g.lineTo(52,34);g.closePath();},c:light,o:false},
+    {d:g=>{g.moveTo(44.2,18);g.lineTo(46,21.5);g.lineTo(44.5,22);g.closePath();},c:'rgba(0,0,0,.3)',o:false},
+    {d:el(62,29.6,1.4,1.2),c:'#15131A',o:false},
+    {d:g=>{g.moveTo(49.5,23.6);g.lineTo(53.8,23.2);g.lineTo(52,25.2);g.closePath();},c:'#F2C94C',o:false},
+  ]);
+})();
+
+/* ---------------- 학생 ---------------- */
+function startStudent(room,seat,name){
+  $('lobby').hidden=true; $('student').hidden=false;
+  $('sWho').textContent=`방 ${room} / ${seat}번 ${name}`; badge($('sNet'));
+  const fc=$('field'),fx=fc.getContext('2d');
+  let cell=16,S=null,round=null,roundId=null,score=0,tokens=TOKENS,lastHalf=-1,lastGen=0,state='wait',cool=0,lastGain=0,lastSend=0,myRank='-';
+
+  function fresh(seed){
+    const rnd=mulberry32(seed||12345);
+    S=makeSim(W,H,{...DEF},rnd);
+    S.scatterR(80); S.scatterW(8);
+    for(let i=0;i<40;i++) S.step(); // 모두 같은 초원으로 시작하도록 미리 40세대 진행
+  }
+  fresh(12345);
+
+  const CARDS={
+    restore:{name:'초지 복원',desc:'맨땅 곳곳에 풀을 다시 심는다',fn:()=>{for(let k=0;k<70;k++)S.plant((Math.random()*W)|0,(Math.random()*H)|0,1)}},
+    cullR:{name:'토끼 이주',desc:'토끼 30%를 다른 곳으로',fn:()=>S.cullR(0.3)},
+    cullW:{name:'늑대 이주',desc:'늑대 30%를 다른 곳으로',fn:()=>S.cullW(0.3)},
+    addR:{name:'토끼 방사',desc:'토끼 15마리를 풀어 놓는다',fn:()=>S.scatterR(15)},
+    addW:{name:'늑대 방사',desc:'늑대 4마리를 풀어 놓는다',fn:()=>S.scatterW(4)},
+  };
+  function renderCards(){
+    const box=$('cards'); box.innerHTML='';
+    Object.entries(CARDS).forEach(([k,c])=>{
+      const b=document.createElement('button'); b.className='ecard';
+      b.innerHTML=`<b>${c.name}</b><small>${c.desc}</small>`;
+      b.disabled=state!=='play'||tokens<=0||performance.now()<cool;
+      b.onclick=()=>{ if(b.disabled)return; c.fn(); tokens--; cool=performance.now()+2000; renderCards(); draw(); updPyr(); setTimeout(renderCards,2050); };
+      box.appendChild(b);
+    });
+    $('tokens').textContent=`남은 개입 ${tokens}회`;
+  }
+  $('sched').innerHTML=EVENTS.map(e=>`<li><span class="tt">${fmt(e.from)}~${fmt(e.to)}</span><span>${e.name}: ${e.kind==='drought'?'풀이 자라는 속도가 1/4로 줄어듭니다':'풀이 두 배 빠르게 자랍니다'}</span></li>`).join('');
+
+  function counts(){let g=0;for(let i=0;i<W*H;i++)if(S.grass[i]>0.3)g++;return {g,r:S.R.length,w:S.Wf.length}}
+  function updPyr(){
+    const {g,r,w}=counts(); const mx=Math.max(g,r,w,1);
+    $('pG').style.width=(g/mx*100)+'%'; $('pR').style.width=(r/mx*100)+'%'; $('pW').style.width=(w/mx*100)+'%';
+    $('iR').style.width=Math.min(100,g*IDEAL_RG/mx*100)+'%'; $('iW').style.width=Math.min(100,r*IDEAL_WR/mx*100)+'%';
+    $('nG').textContent=g; $('nR').textContent=r; $('nW').textContent=w;
+    const b=balanceOf(g,r,w); $('bal').style.width=(b*100)+'%'; $('balTxt').textContent=Math.round(b*100)+'%';
+    const cb=$('collapseBanner');
+    if(state==='play'&&(!r||!w)){cb.hidden=false;cb.textContent=(!r?'토끼':'늑대')+'가 사라져 생태계가 무너졌습니다. 0점! 방사 카드로 되살리세요.'} else cb.hidden=true;
+    return {g,r,w,b};
+  }
+  function size(){const dpr=window.devicePixelRatio||1,wpx=fc.parentElement.clientWidth; cell=wpx/W; fc.width=Math.round(wpx*dpr); fc.height=Math.round(cell*H*dpr); fc.style.height=(cell*H)+'px'; fx.setTransform(dpr,0,0,dpr,0,0); draw();}
+  function draw(){
+    fx.fillStyle=COL.soil; fx.fillRect(0,0,W*cell,H*cell); fx.fillStyle=COL.grass;
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){const g=S.grass[y*W+x]; if(g>0.05){fx.globalAlpha=0.18+0.82*g; fx.fillRect(x*cell,y*cell,cell+0.5,cell+0.5);}}
+    fx.globalAlpha=1;
+    const put=(img,o,sz)=>{const cx=(o.x+.5)*cell,cy=(o.y+.5)*cell; if((o.f||1)<0){fx.save();fx.translate(cx,cy);fx.scale(-1,1);fx.drawImage(img,-sz/2,-sz/2,sz,sz);fx.restore();} else fx.drawImage(img,cx-sz/2,cy-sz/2,sz,sz);};
+    for(const r of S.R)put(SPR.rabbit,r,cell*1.45); for(const w of S.Wf)put(SPR.wolf,w,cell*1.75);
+  }
+  function overlay(t,p){$('overlay').hidden=!t; if(t){$('ovTitle').textContent=t;$('ovText').textContent=p||''}}
+  function send(force){
+    const now=performance.now(); if(!force&&now-lastSend<1000)return; lastSend=now;
+    const {g,r,w}=counts();
+    NET.setPlayer(room,seat,{name,score,b:Math.round(balanceOf(g,r,w)*100)/100,g,r,w,st:state==='play'&&(!r||!w)?'collapse':state,round:roundId,tok:tokens,at:NET.now()});
+  }
+
+  NET.onRound(room,v=>{
+    round=v;
+    if(!v||v.state==='idle'){ if(state!=='wait'){state='wait';} roundId=null; overlay('선생님을 기다리는 중','선생님이 대결을 시작하면 자동으로 시작됩니다.'); renderCards(); send(true); return; }
+    if(v.id!==roundId){ // 새 라운드
+      roundId=v.id; fresh(v.seed); tokens=TOKENS; lastHalf=-1; lastGen=0; S.growMul=1;
+      score=0; try{const saved=JSON.parse(localStorage.getItem('eco:score')||'null'); if(saved&&saved.round===v.id&&saved.room===room&&saved.seat===seat){score=saved.score;tokens=saved.tok??TOKENS}}catch(e){}
+      state='ready'; draw(); updPyr(); renderCards();
+    }
+    if(v.state==='end'&&state!=='done'){ finish(); }
+  });
+  NET.onPlayers(room,ps=>{
+    if(!roundId)return;
+    const list=Object.entries(ps).filter(([k,p])=>p&&p.round===roundId).map(([k,p])=>({seat:+k,score:p.score||0})).sort((a,b)=>b.score-a.score);
+    const i=list.findIndex(p=>p.seat===seat); myRank=i>=0?(i+1)+'/'+list.length:'-'; $('sRank').textContent=myRank;
+    if(state==='done') $('ovText').textContent=`최종 점수 ${score}점, ${myRank.replace('/','위 / ')}명`;
+  });
+
+  function finish(){ state='done'; send(true); renderCards(); overlay('대결 종료!',`최종 점수 ${score}점`); $('banner').hidden=true; }
+
+  function loop(){
+    if(round&&roundId&&(state==='ready'||state==='play')){
+      const el=(NET.now()-round.startAt)/1000;
+      if(el<0){ overlay('곧 시작합니다',Math.ceil(-el)+'초 뒤 시작'); $('sClock').textContent=fmt(round.duration); }
+      else if(el>=round.duration){ finish(); }
+      else{
+        if(state!=='play'){state='play';overlay(null);renderCards();}
+        const target=Math.floor(el*GPS); let n=0;
+        while(lastGen<target&&n<12){ const sec=lastGen/GPS; const ev=EVENTS.find(e=>sec>=e.from&&sec<e.to); S.growMul=ev?ev.mul:1; S.step(); lastGen++; n++; }
+        if(lastGen<target) lastGen=target; // 너무 뒤처지면 따라잡기
+        const half=Math.floor(el*2);
+        if(half>lastHalf){ const st=updPyr(); const pts=pointsOf(st.g,st.r,st.w); const k=lastHalf<0?1:half-lastHalf; score+=pts*Math.min(k,2); lastGain=pts; lastHalf=half;
+          $('gain').textContent='+'+pts; try{localStorage.setItem('eco:score',JSON.stringify({round:roundId,room,seat,score,tok:tokens}))}catch(e){} }
+        $('sScore').textContent=score; $('sClock').textContent=fmt(round.duration-el);
+        const ev=EVENTS.find(e=>el>=e.from-5&&el<e.to);
+        const bn=$('banner');
+        if(ev){bn.hidden=false; bn.className='banner '+ev.kind; bn.textContent=el<ev.from?`${Math.ceil(ev.from-el)}초 뒤 ${ev.name} 시작!`:`${ev.name} 진행 중 (남은 ${Math.ceil(ev.to-el)}초)`;} else bn.hidden=true;
+        if(n)draw();
+        send();
+      }
+    }
+    requestAnimationFrame(loop);
+  }
+  window.addEventListener('resize',size);
+  renderCards(); size(); updPyr(); send(true); requestAnimationFrame(loop);
+  setInterval(()=>send(true),3000);
+}
+
+/* ---------------- 교사 ---------------- */
+function startTeacher(room){
+  $('lobby').hidden=true; $('teacher').hidden=false; $('tRoom').textContent='방 '+room; badge($('tNet'));
+  let round=null, players={};
+  if(NET.mode==='demo') $('tMsg').textContent='체험 모드: 이 브라우저의 다른 탭에서 학생으로 입장하면 여기에 나타납니다.';
+  else $('tMsg').textContent='학생들에게 방 코드 "'+room+'"를 알려 주세요. 모두 입장하면 대결 시작을 누릅니다.';
+  $('tStart').onclick=()=>{
+    const dur=+$('tDur').value;
+    NET.setRound(room,{id:'r'+Date.now(),seed:(Math.random()*1e9)|0,startAt:NET.now()+5000,duration:dur,state:'run'});
+  };
+  $('tStop').onclick=()=>{ if(round&&round.state==='run') NET.setRound(room,{...round,state:'end'}); };
+  let armed=false;
+  $('tClear').onclick=()=>{
+    if(!armed){armed=true;$('tClear').textContent='한 번 더 누르면 비웁니다';setTimeout(()=>{armed=false;$('tClear').textContent='참가자 비우기'},3000);return}
+    armed=false;$('tClear').textContent='참가자 비우기'; NET.clearPlayers(room); NET.setRound(room,{state:'idle'});
+  };
+  NET.onRound(room,v=>{round=v;render()});
+  NET.onPlayers(room,v=>{players=v||{};render()});
+  function render(){
+    const now=NET.now();
+    const rid=round&&round.id;
+    const arr=[];
+    for(let i=1;i<=SEATS;i++){const p=players[i]; arr.push({seat:i,p:p||null})}
+    const ranked=arr.filter(a=>a.p&&(!rid||a.p.round===rid)).sort((a,b)=>(b.p.score||0)-(a.p.score||0));
+    const rankOf={}; ranked.forEach((a,i)=>rankOf[a.seat]=i+1);
+    $('tCount').textContent=`${arr.filter(a=>a.p).length}명 접속`;
+    $('tRank').innerHTML=ranked.slice(0,10).map((a,i)=>`<li><span class="pos">${i+1}</span><span class="nm">${a.seat}번 ${esc(a.p.name)}</span><span class="sc">${a.p.score||0}</span></li>`).join('')||'<li><span></span><span class="muted">아직 점수가 없습니다</span><span></span></li>';
+    $('seats').innerHTML=arr.map(a=>{
+      const p=a.p;
+      if(!p) return `<div class="seat empty"><div class="top"><span class="no">${a.seat}번</span></div><div class="muted" style="font-size:13px">미접속</div></div>`;
+      const off=now-(p.at||0)>8000, col=p.st==='collapse';
+      const mx=Math.max(p.g||0,p.r||0,p.w||0,1);
+      const stTxt=off?'연결 끊김':col?'생태계 붕괴':p.st==='play'?'진행 중':p.st==='done'?'종료':'대기';
+      return `<div class="seat ${off?'off':''} ${col&&!off?'collapse':''}">
+        <div class="top"><span class="nm">${esc(p.name)}</span><span class="no">${a.seat}번</span></div>
+        <div class="top"><span class="sc">${p.score||0}</span><span class="rk">${rankOf[a.seat]?rankOf[a.seat]+'위':''}</span></div>
+        <div class="mini" title="개체수 피라미드">
+          <i style="width:${(p.w||0)/mx*100}%;background:var(--wolf)"></i>
+          <i style="width:${(p.r||0)/mx*100}%;background:var(--rabbit)"></i>
+          <i style="width:${(p.g||0)/mx*100}%;background:var(--grass)"></i>
+        </div>
+        <div class="bal" title="균형도"><i style="width:${Math.round((p.b||0)*100)}%"></i></div>
+        <div class="st"><span>${stTxt}</span><span class="mono">풀${p.g||0} 토${p.r||0} 늑${p.w||0}</span></div>
+      </div>`}).join('');
+  }
+  setInterval(()=>{
+    render();
+    if(round&&round.state==='run'){const el=(NET.now()-round.startAt)/1000; $('tClock').textContent=el<0?'시작 '+Math.ceil(-el):fmt(round.duration-el);}
+    else $('tClock').textContent=round&&round.state==='end'?'종료':'-:--';
+  },1000);
+  render();
+}
+})();
+</script>
+</body>
+</html>
