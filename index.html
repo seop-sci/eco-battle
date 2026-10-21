@@ -68,6 +68,9 @@ button{cursor:pointer}
 .netbadge{font-size:12px;padding:3px 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel)}
 .netbadge.ok{border-color:var(--good);color:var(--good)}
 .netbadge.demo{border-color:var(--warn);color:var(--warn)}
+.snd{display:inline-flex;gap:6px}
+.sndbtn{font-size:12.5px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel)}
+.sndbtn[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);font-weight:700}
 
 /* ---------- lobby ---------- */
 #lobby{max-width:520px;margin:6vh auto 0;display:flex;flex-direction:column;gap:16px}
@@ -198,6 +201,7 @@ button{cursor:pointer}
       <li>이상적인 모양: 토끼 수가 풀 덮인 칸의 약 1/4, 늑대 수가 토끼 수의 약 1/5일 때입니다.</li>
       <li>토끼나 늑대가 사라지면 생태계가 무너진 것으로 보고 0점입니다. 방사 카드로 되살릴 수 있어요.</li>
       <li>큰 시련 3번(가뭄, 토끼 전염병, 한파)이 예고된 시각에 오고, 그 사이 20초마다 작은 시련이 찾아옵니다. 시련 일정은 모든 학생이 같습니다.</li>
+      <li>오른쪽 위 버튼으로 배경음악과 효과음을 따로 켜고 끌 수 있습니다.</li>
       <li>환경 변화 카드는 처음에 4번 쓸 수 있고, 7초마다 1번씩 다시 생깁니다(최대 6번). 자주 개입하며 피라미드를 맞춰 보세요.</li>
     </ol>
   </div>
@@ -209,6 +213,7 @@ button{cursor:pointer}
     <h2>초원 균형 대결</h2>
     <span class="who" id="sWho"></span>
     <span class="netbadge" id="sNet"></span>
+    <span class="snd"><button class="sndbtn" data-snd="music">배경음악</button><button class="sndbtn" data-snd="sfx">효과음</button></span>
     <div class="big">
       <div><span class="k">남은 시간</span><span class="v" id="sClock">-:--</span></div>
       <div><span class="k">순위</span><span class="v" id="sRank">-</span></div>
@@ -266,6 +271,7 @@ button{cursor:pointer}
     <h1>초원 균형 대결</h1>
     <span class="room" id="tRoom"></span>
     <span class="netbadge" id="tNet"></span>
+    <span class="snd"><button class="sndbtn" data-snd="sfx">효과음</button></span>
     <div class="tctl">
       <label for="tDur" class="muted">시간</label>
       <select id="tDur"><option value="180">3분</option><option value="300" selected>5분</option><option value="420">7분</option></select>
@@ -496,6 +502,109 @@ function badge(el){
 }
 statusSubs.push(()=>{ const m=document.getElementById('lobbyMsg'); if(m&&NET_STATUS&&NET_STATUS!=='connected'&&NET_STATUS!=='connecting'&&!document.getElementById('pinIn')) m.textContent=NET_STATUS; });
 
+
+/* ---------------- 소리 (Web Audio로 직접 연주, 음원 파일 없음) ---------------- */
+const AUD=(function(){
+  let ctx=null,master,musicBus,sfxBus,noiseBuf,timer=null,nextT=0,step=0,mood='calm',wind=null,lastMel=72;
+  let on={music:true,sfx:true};
+  try{const v=JSON.parse(localStorage.getItem('eco:sound')||'null');if(v)on={music:v.music!==false,sfx:v.sfx!==false}}catch(e){}
+  const mf=m=>440*Math.pow(2,(m-69)/12);
+  const VOL={music:.2,sfx:.55};
+  function init(){
+    if(ctx){if(ctx.state==='suspended')ctx.resume();return true}
+    const AC=window.AudioContext||window.webkitAudioContext; if(!AC)return false;
+    try{ctx=new AC()}catch(e){return false}
+    master=ctx.createGain();master.gain.value=1.5;
+    const comp=ctx.createDynamicsCompressor();master.connect(comp);comp.connect(ctx.destination);
+    musicBus=ctx.createGain();musicBus.gain.value=on.music?VOL.music:0;musicBus.connect(master);
+    sfxBus=ctx.createGain();sfxBus.gain.value=on.sfx?VOL.sfx:0;sfxBus.connect(master);
+    noiseBuf=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate);const d=noiseBuf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+    return true;
+  }
+  const ok=()=>!!ctx;
+  function env(g,t,vol,a,dur){g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(vol,t+a);g.gain.exponentialRampToValueAtTime(0.0001,t+dur)}
+  function tone(f,t,dur,o={}){
+    const os=ctx.createOscillator(),g=ctx.createGain();os.type=o.type||'sine';os.frequency.setValueAtTime(f,t);
+    if(o.glide)os.frequency.exponentialRampToValueAtTime(o.glide,t+(o.gt||dur));
+    if(o.vib){const l=ctx.createOscillator(),lg=ctx.createGain();l.frequency.value=o.vib;lg.gain.value=f*(o.vd||.03);l.connect(lg);lg.connect(os.frequency);l.start(t);l.stop(t+dur+.05)}
+    if(o.det)os.detune.value=o.det;
+    env(g,t,o.vol||.25,o.a||.01,dur);os.connect(g);g.connect(o.bus||sfxBus);os.start(t);os.stop(t+dur+.05);
+  }
+  function noise(t,dur,o={}){
+    const sr=ctx.createBufferSource();sr.buffer=noiseBuf;sr.loop=true;
+    const fl=ctx.createBiquadFilter();fl.type=o.type||'bandpass';fl.frequency.setValueAtTime(o.f||1000,t);if(o.f2)fl.frequency.exponentialRampToValueAtTime(o.f2,t+dur);fl.Q.value=o.q||1;
+    const g=ctx.createGain();env(g,t,o.vol||.25,o.a||.01,dur);sr.connect(fl);fl.connect(g);g.connect(o.bus||sfxBus);sr.start(t,Math.random()*1.5);sr.stop(t+dur+.05);
+  }
+  // ----- 배경음악: 분위기마다 화음과 음계가 바뀌는 8분음표 루프 -----
+  const MOODS={
+    calm:   {chords:[[60,64,67],[57,60,64],[53,57,60],[55,59,62]],scale:[60,62,64,67,69,72,74,76,79],step:.3,mel:.55,arp:1,wave:'triangle'},
+    drought:{chords:[[57,60,64],[50,53,57],[57,60,64],[52,56,59]],scale:[57,59,60,62,64,65,68,69,71],step:.36,mel:.35,arp:.5,wave:'triangle'},
+    plague: {chords:[[50,53,57],[46,50,53],[43,46,50],[45,49,52]],scale:[62,63,65,66,68,69,70,73,74],step:.33,mel:.4,arp:.7,wave:'sawtooth'},
+    cold:   {chords:[[52,55,59],[48,52,55],[45,48,52],[47,51,54]],scale:[76,78,79,81,83,84,86,88,91],step:.34,mel:.3,arp:.4,wave:'sine'},
+  };
+  function playStep(st,t){
+    const M=MOODS[mood],bar=Math.floor(st/8)%4,b=st%8,ch=M.chords[bar];
+    if(b===0){tone(mf(ch[0]-24),t,M.step*7.5,{vol:.32,a:.02,bus:musicBus});
+      ch.forEach(n=>tone(mf(n),t,M.step*8,{type:'triangle',vol:.045,a:.4,bus:musicBus}));}
+    if(b===4)tone(mf(ch[0]-24+7),t,M.step*3.5,{vol:.2,a:.02,bus:musicBus});
+    if(Math.random()<M.arp)tone(mf(ch[b%3]+12),t,M.step*1.2,{vol:.07,a:.005,bus:musicBus});
+    if((b%2===0||Math.random()<.3)&&Math.random()<M.mel){
+      const sc=M.scale;let i=sc.indexOf(lastMel);if(i<0)i=(Math.random()*sc.length)|0;
+      i=Math.max(0,Math.min(sc.length-1,i+[-2,-1,-1,0,1,1,2][(Math.random()*7)|0]));lastMel=sc[i];
+      const len=M.step*(Math.random()<.3?3:1.6);
+      tone(mf(lastMel),t,len,{type:M.wave,vol:mood==='plague'?.035:.09,a:.02,vib:mood==='plague'?5:(mood==='cold'?0:4.5),vd:.006,bus:musicBus});
+      if(mood==='cold')tone(mf(lastMel+12),t,len*2.5,{vol:.03,a:.005,bus:musicBus});
+    }
+  }
+  function sched(){if(!ctx)return;while(nextT<ctx.currentTime+.2){playStep(step,nextT);nextT+=MOODS[mood].step;step++}}
+  function startMusic(){if(!ok()||timer)return;nextT=ctx.currentTime+.08;step=0;timer=setInterval(sched,40)}
+  function stopMusic(){if(timer){clearInterval(timer);timer=null}}
+  function setMood(m){if(MOODS[m]&&m!==mood){mood=m;step=Math.ceil(step/8)*8}}
+  function windOn(){if(!ok()||wind)return;const t=ctx.currentTime;const sr=ctx.createBufferSource();sr.buffer=noiseBuf;sr.loop=true;
+    const fl=ctx.createBiquadFilter();fl.type='bandpass';fl.frequency.value=500;fl.Q.value=.8;
+    const l=ctx.createOscillator(),lg=ctx.createGain();l.frequency.value=.15;lg.gain.value=300;l.connect(lg);lg.connect(fl.frequency);
+    const g=ctx.createGain();g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(.12,t+2);
+    sr.connect(fl);fl.connect(g);g.connect(sfxBus);sr.start(t);l.start(t);wind={sr,l,g}}
+  function windOff(){if(!wind)return;const t=ctx.currentTime;wind.g.gain.cancelScheduledValues(t);wind.g.gain.setValueAtTime(wind.g.gain.value,t);wind.g.gain.linearRampToValueAtTime(0.0001,t+1.2);
+    const w=wind;setTimeout(()=>{try{w.sr.stop();w.l.stop()}catch(e){}},1400);wind=null}
+  // ----- 효과음 -----
+  const now=()=>ctx.currentTime+.01;
+  const SFX={
+    count(){tone(660,now(),.18,{type:'square',vol:.12})},
+    go(){const t=now();[523,659,784,1047].forEach((f,i)=>tone(f,t+i*.08,.35,{type:'triangle',vol:.22}))},
+    warn(){const t=now();tone(880,t,.13,{type:'square',vol:.1});tone(660,t+.15,.13,{type:'square',vol:.1})},
+    restore(){const t=now();[1047,1319,1568,2093].forEach((f,i)=>tone(f,t+i*.06,.4,{vol:.16}));noise(t,.5,{type:'highpass',f:5000,vol:.05})},
+    cull(){const t=now();noise(t,.45,{f:2400,f2:350,q:2,vol:.35,a:.03})},
+    add(){const t=now();tone(380,t,.14,{glide:900,vol:.25});tone(520,t+.12,.14,{glide:1200,vol:.2})},
+    recharge(){tone(1568,now(),.12,{vol:.1})},
+    fire(){const t=now();noise(t,2,{type:'lowpass',f:900,vol:.45,a:.15});noise(t,1.2,{f:300,f2:120,q:.7,vol:.3,a:.05});
+      for(let i=0;i<30;i++)noise(t+Math.random()*1.8,.03,{type:'highpass',f:3000,vol:.25,a:.002})},
+    rabIn(){const t=now();noise(t,1.1,{type:'lowpass',f:250,vol:.3,a:.2});
+      for(let i=0;i<26;i++)tone(1100+Math.random()*900,t+Math.random()*1.1,.05,{type:'triangle',vol:.1,a:.003})},
+    wolfIn(){const t=now();[0,.35].forEach((d,k)=>{const f=k?370:300,os=ctx.createOscillator(),g=ctx.createGain(),fl=ctx.createBiquadFilter();
+      os.type='sawtooth';fl.type='lowpass';fl.frequency.value=1400;os.frequency.setValueAtTime(f,t+d);os.frequency.linearRampToValueAtTime(f*1.7,t+d+.5);os.frequency.setValueAtTime(f*1.7,t+d+1.1);os.frequency.linearRampToValueAtTime(f*1.25,t+d+1.7);
+      const l=ctx.createOscillator(),lg=ctx.createGain();l.frequency.value=5.5;lg.gain.value=8;l.connect(lg);lg.connect(os.frequency);
+      env(g,t+d,k?.08:.12,.25,1.8);os.connect(fl);fl.connect(g);g.connect(sfxBus);os.start(t+d);l.start(t+d);os.stop(t+d+1.9);l.stop(t+d+1.9)})},
+    rabSick(){const t=now();tone(620,t,.9,{glide:240,vib:7,vd:.04,vol:.18});tone(520,t+.18,.9,{glide:200,vib:6,vd:.04,vol:.12})},
+    poach(n){const t=now();for(let i=0;i<Math.min(n,6);i++){const d=i*.25;noise(t+d,.22,{type:'lowpass',f:700,vol:.5,a:.003});tone(130,t+d,.3,{glide:55,vol:.3,a:.003})}},
+    big(k){const t=now();
+      if(k==='drought'){tone(110,t,2.6,{type:'sawtooth',vol:.08,a:.9});tone(165,t,2.6,{vol:.15,a:.9});noise(t,2.4,{f:800,f2:300,q:.6,vol:.12,a:1})}
+      else if(k==='plague'){tone(233,t,2.6,{type:'triangle',vol:.16,a:.8,vib:4});tone(247,t,2.6,{type:'triangle',vol:.14,a:.8});tone(349,t+.6,2,{vol:.08,a:.6,det:30})}
+      else if(k==='cold'){[1568,2093,2637].forEach((f,i)=>tone(f,t+i*.18,2.4,{vol:.12,a:.005}))}},
+    bigEnd(){const t=now();[659,784,1047].forEach((f,i)=>tone(f,t+i*.1,.5,{type:'triangle',vol:.15}))},
+    collapse(){const t=now();[523,440,349,262].forEach((f,i)=>tone(f,t+i*.22,.3,{type:'triangle',vol:.2}))},
+    end(){const t=now();[523,659,784].forEach((f,i)=>tone(f,t+i*.14,.3,{type:'triangle',vol:.22}));[523,659,784,1047].forEach(f=>tone(f,t+.45,1.4,{type:'triangle',vol:.12,a:.02}))},
+  };
+  function play(name,...a){if(!ok()||!on.sfx)return;try{SFX[name]&&SFX[name](...a)}catch(e){}}
+  function setOn(k,v){on[k]=v;try{localStorage.setItem('eco:sound',JSON.stringify(on))}catch(e){}
+    if(ctx){const bus=k==='music'?musicBus:sfxBus;bus.gain.setTargetAtTime(v?VOL[k]:0,ctx.currentTime,.05)}
+    paint()}
+  function paint(){document.querySelectorAll('[data-snd]').forEach(b=>{const k=b.dataset.snd;b.setAttribute('aria-pressed',on[k]);b.textContent=(k==='music'?'배경음악 ':'효과음 ')+(on[k]?'켬':'끔')})}
+  document.querySelectorAll('[data-snd]').forEach(b=>b.onclick=()=>{init();setOn(b.dataset.snd,!on[b.dataset.snd])});
+  paint();
+  return {init,startMusic,stopMusic,setMood,windOn,windOff,play};
+})();
+
 /* ---------------- 입장 화면 ---------------- */
 for(let i=1;i<=SEATS;i++){const o=document.createElement('option');o.value=i;o.textContent=i+'번';$('inSeat').appendChild(o)}
 badge($('netBadge'));
@@ -508,6 +617,7 @@ $('goStudent').onclick=()=>{
   if(!room){$('lobbyMsg').textContent='방 코드를 입력해 주세요. 선생님이 알려준 코드와 똑같이 적어야 합니다.';return}
   if(!name){$('lobbyMsg').textContent='이름이나 별명을 입력해 주세요.';return}
   try{localStorage.setItem('eco:me',JSON.stringify({room,seat,name}))}catch(e){}
+  AUD.init();
   startStudent(room,seat,name);
 };
 $('goTeacher').onclick=()=>{
@@ -518,7 +628,7 @@ $('goTeacher').onclick=()=>{
 function showPin(room){
   const box=$('lobbyMsg');
   box.innerHTML='교사 비밀번호: <input id="pinIn" type="password" inputmode="numeric" style="border:1px solid var(--line);border-radius:6px;padding:4px 8px;width:110px"> <button class="btn" id="pinOk" style="padding:4px 12px">확인</button>';
-  const go=()=>{ if(!CFG_BROKEN&&$('pinIn').value===TEACHER_PIN) startTeacher(room); else box.firstChild.textContent='비밀번호가 다릅니다. 다시 입력: '; };
+  const go=()=>{ if(!CFG_BROKEN&&$('pinIn').value===TEACHER_PIN){ AUD.init(); startTeacher(room); } else box.firstChild.textContent='비밀번호가 다릅니다. 다시 입력: '; };
   $('pinOk').onclick=go; $('pinIn').onkeydown=e=>{if(e.key==='Enter')go()}; $('pinIn').focus();
 }
 
@@ -563,6 +673,7 @@ function startStudent(room,seat,name){
   const fc=$('field'),fx=fc.getContext('2d'),fxc=$('fxc'),fxx=fxc.getContext('2d');
   let FX=[],SNOW=[],SPORE=[],lastFxNow=0;
   const RM=!!(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches);
+  let wasDead=false,lastCount=null,lastWarn=null,curBig=null;
   let plan=buildPlan(12345,300),ti=0,lastRech=null,tlTicks=[],tlSegs=[];
   let cell=16,S=null,round=null,roundId=null,score=0,tokens=TOKENS,lastHalf=-1,lastGen=0,state='wait',cool=0,lastGain=0,lastSend=0,myRank='-';
 
@@ -587,7 +698,7 @@ function startStudent(room,seat,name){
       const b=document.createElement('button'); b.className='ecard';
       b.innerHTML=`<b>${c.name}</b><small>${c.desc}</small>`;
       b.disabled=state!=='play'||tokens<=0||performance.now()<cool;
-      b.onclick=()=>{ if(b.disabled)return; c.fn(); tokens--; cool=performance.now()+2000; renderCards(); draw(); updPyr(); setTimeout(renderCards,2050); };
+      b.onclick=()=>{ if(b.disabled)return; c.fn(); AUD.play(k==='restore'?'restore':k.startsWith('cull')?'cull':'add'); tokens--; cool=performance.now()+2000; renderCards(); draw(); updPyr(); setTimeout(renderCards,2050); };
       box.appendChild(b);
     });
     updTokens();
@@ -631,6 +742,7 @@ function startStudent(room,seat,name){
   const cp=(x,y)=>[(x+.5)*cell,(y+.5)*cell];
   function addFx(f){f.t0=performance.now()+(f.delay||0);FX.push(f)}
   function trialFx(tr,d){
+    AUD.play(tr.type==='wolfPoach'?'poach':tr.type, d.goneW.length);
     if(tr.type==='fire'){
       const [cx,cy]=cp(tr.x,tr.y), R=6*cell, parts=[];
       for(let i=0;i<(RM?40:150);i++){const a=Math.random()*6.283,r=Math.sqrt(Math.random())*R;
@@ -742,6 +854,7 @@ function startStudent(room,seat,name){
     $('nG').textContent=g; $('nR').textContent=r; $('nW').textContent=w;
     const b=balanceOf(g,r,w); $('bal').style.width=(b*100)+'%'; $('balTxt').textContent=Math.round(b*100)+'%';
     const cb=$('collapseBanner');
+    const dead=state==='play'&&(!r||!w); if(dead&&!wasDead) AUD.play('collapse'); wasDead=dead;
     if(state==='play'&&(!r||!w)){cb.hidden=false;cb.textContent=(!r?'토끼':'늑대')+'가 사라져 생태계가 무너졌습니다. 0점! 방사 카드로 되살리세요.'} else cb.hidden=true;
     return {g,r,w,b};
   }
@@ -762,9 +875,9 @@ function startStudent(room,seat,name){
 
   NET.onRound(room,v=>{
     round=v;
-    if(!v||v.state==='idle'){ if(state!=='wait'){state='wait';} roundId=null; overlay('선생님을 기다리는 중','선생님이 대결을 시작하면 자동으로 시작됩니다.'); renderCards(); send(true); return; }
+    if(!v||v.state==='idle'){ if(state!=='wait'){state='wait';} AUD.stopMusic(); AUD.windOff(); curBig=null; roundId=null; overlay('선생님을 기다리는 중','선생님이 대결을 시작하면 자동으로 시작됩니다.'); renderCards(); send(true); return; }
     if(v.id!==roundId){ // 새 라운드
-      roundId=v.id; fresh(v.seed); tokens=TOKENS; lastHalf=-1; lastGen=0; ti=0; lastRech=null; S.growMul=1; plan=buildPlan(v.seed,v.duration||300); renderPlan();
+      roundId=v.id; wasDead=false; lastCount=null; lastWarn=null; curBig=null; fresh(v.seed); tokens=TOKENS; lastHalf=-1; lastGen=0; ti=0; lastRech=null; S.growMul=1; plan=buildPlan(v.seed,v.duration||300); renderPlan();
       score=0; try{const saved=JSON.parse(localStorage.getItem('eco:score')||'null'); if(saved&&saved.round===v.id&&saved.room===room&&saved.seat===seat){score=saved.score;tokens=saved.tok??TOKENS}}catch(e){}
       state='ready'; draw(); updPyr(); renderCards();
     }
@@ -777,15 +890,15 @@ function startStudent(room,seat,name){
     if(state==='done') $('ovText').textContent=`최종 점수 ${score}점, ${myRank.replace('/','위 / ')}명`;
   });
 
-  function finish(){ state='done'; send(true); renderCards(); overlay('대결 종료!',`최종 점수 ${score}점`); $('banner').hidden=true; }
+  function finish(){ if(state!=='done'){ AUD.stopMusic(); AUD.windOff(); AUD.play('end'); } curBig=null; state='done'; send(true); renderCards(); overlay('대결 종료!',`최종 점수 ${score}점`); $('banner').hidden=true; }
 
   function loop(){
     if(round&&roundId&&(state==='ready'||state==='play')){
       const el=(NET.now()-round.startAt)/1000;
-      if(el<0){ overlay('곧 시작합니다',Math.ceil(-el)+'초 뒤 시작'); $('sClock').textContent=fmt(round.duration); }
+      if(el<0){ const c=Math.ceil(-el); if(c<=3&&c!==lastCount){lastCount=c;AUD.play('count')} overlay('곧 시작합니다',c+'초 뒤 시작'); $('sClock').textContent=fmt(round.duration); }
       else if(el>=round.duration){ finish(); }
       else{
-        if(state!=='play'){state='play';overlay(null);renderCards();}
+        if(state!=='play'){state='play';overlay(null);renderCards(); if(el<2){AUD.play('go');} AUD.setMood('calm'); AUD.startMusic(); lastCount=null;}
         const target=Math.floor(el*GPS); let n=0;
         while(lastGen<target&&n<12){
           const sec=lastGen/GPS, b=plan.big.find(e=>sec>=e.from&&sec<e.to);
@@ -796,13 +909,17 @@ function startStudent(room,seat,name){
         if(lastGen<target){ lastGen=target; while(ti<plan.tr.length&&plan.tr[ti].at<=lastGen/GPS) ti++; } // 너무 뒤처지면 따라잡기
         const rc=Math.floor(el/RECHARGE);
         if(lastRech===null) lastRech=rc;
-        if(rc>lastRech){ tokens=Math.min(TOKENS_MAX,tokens+(rc-lastRech)); lastRech=rc; renderCards(); }
+        if(rc>lastRech){ const before=tokens; tokens=Math.min(TOKENS_MAX,tokens+(rc-lastRech)); lastRech=rc; if(tokens>before) AUD.play('recharge'); renderCards(); }
         updTokens(); updPlan(el);
         const half=Math.floor(el/TICK);
         if(half>lastHalf){ const st=updPyr(); const pts=pointsOf(st.g,st.r,st.w); const k=lastHalf<0?1:half-lastHalf; score+=pts*Math.min(k,2); lastGain=pts; lastHalf=half;
           $('gain').textContent='+'+pts; try{localStorage.setItem('eco:score',JSON.stringify({round:roundId,room,seat,score,tok:tokens}))}catch(e){} }
         $('sScore').textContent=score; $('sClock').textContent=fmt(round.duration-el);
         const bn=$('banner');
+        const wn=plan.tr.find(t=>el>=t.at-3&&el<t.at);
+        if(wn){const k=wn.at+'_'+Math.ceil(wn.at-el); if(k!==lastWarn){lastWarn=k;AUD.play('warn')}}
+        const nb=plan.big.find(e=>el>=e.from&&el<e.to), nk=nb?nb.kind:null;
+        if(nk!==curBig){ if(nk){AUD.play('big',nk);AUD.setMood(nk);nk==='cold'?AUD.windOn():AUD.windOff();} else {if(curBig)AUD.play('bigEnd');AUD.setMood('calm');AUD.windOff();} curBig=nk; }
         const soon=plan.tr.find(t=>el>=t.at-3&&el<t.at+2.5);
         const ev=plan.big.find(e=>el>=e.from-5&&el<e.to);
         if(soon){const T=TRIALS[soon.type]; bn.hidden=false; bn.className='banner trial'; bn.textContent=el<soon.at?`${Math.ceil(soon.at-el)}초 뒤 시련: ${T.name}!`:`시련 발생! ${T.desc}`;}
@@ -865,6 +982,14 @@ function startTeacher(room){
         <div class="st"><span>${stTxt}</span><span class="mono">풀${p.g||0} 토${p.r||0} 늑${p.w||0}</span></div>
       </div>`}).join('');
   }
+  let tLastC=null,tEnded=null,tStarted=null;
+  setInterval(()=>{
+    if(!round||!round.id)return;
+    const el=(NET.now()-round.startAt)/1000;
+    if(round.state==='run'&&el<0){const c=Math.ceil(-el);if(c<=3&&c!==tLastC){tLastC=c;AUD.play('count')}}
+    if(round.state==='run'&&el>=0&&el<1&&tStarted!==round.id){tStarted=round.id;AUD.play('go')}
+    if((round.state==='end'||el>=round.duration)&&tEnded!==round.id&&el>=0){tEnded=round.id;AUD.play('end')}
+  },100);
   setInterval(()=>{
     render();
     if(round&&round.state==='run'){const el=(NET.now()-round.startAt)/1000; $('tClock').textContent=el<0?'시작 '+Math.ceil(-el):fmt(round.duration-el);}
