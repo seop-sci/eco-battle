@@ -274,7 +274,7 @@ button{cursor:pointer}
     <span class="snd"><button class="sndbtn" data-snd="sfx">효과음</button></span>
     <div class="tctl">
       <label for="tDur" class="muted">시간</label>
-      <select id="tDur"><option value="180">3분</option><option value="300" selected>5분</option><option value="420">7분</option></select>
+      <select id="tDur"><option value="180" selected>3분</option><option value="300">5분</option><option value="420">7분</option></select>
       <button class="btn primary" id="tStart">대결 시작</button>
       <button class="btn" id="tStop">지금 끝내기</button>
       <button class="btn danger" id="tClear">참가자 비우기</button>
@@ -506,8 +506,8 @@ statusSubs.push(()=>{ const m=document.getElementById('lobbyMsg'); if(m&&NET_STA
 /* ---------------- 소리 (Web Audio로 직접 연주, 음원 파일 없음) ---------------- */
 const AUD=(function(){
   let ctx=null,master,musicBus,sfxBus,noiseBuf,timer=null,nextT=0,step=0,mood='calm',wind=null,lastMel=72;
-  let on={music:true,sfx:true};
-  try{const v=JSON.parse(localStorage.getItem('eco:sound')||'null');if(v)on={music:v.music!==false,sfx:v.sfx!==false}}catch(e){}
+  let on={music:false,sfx:true};
+  try{const v=JSON.parse(localStorage.getItem('eco:sound')||'null');if(v)on={music:v.music===true,sfx:v.sfx!==false}}catch(e){}
   const mf=m=>440*Math.pow(2,(m-69)/12);
   const VOL={music:.2,sfx:.55};
   function init(){
